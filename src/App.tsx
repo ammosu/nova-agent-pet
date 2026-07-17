@@ -1,4 +1,10 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { petStatus, PetState, transitionPet } from "./petMachine";
 import { speak, stopSpeaking, VoiceProvider } from "./voice";
 
@@ -10,8 +16,25 @@ type Message = {
 };
 
 type Facing = "left" | "center" | "right";
+type PetAction = "wave" | "stretch" | "dance" | "doze";
+type ActiveAction = { name: PetAction; run: number };
 
-const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve();
+    }, duration);
+    const handleAbort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("Task cancelled", "AbortError"));
+    };
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
+
+const isAbortError = (error: unknown) =>
+  error instanceof DOMException && error.name === "AbortError";
 
 const createReply = (input: string) => {
   if (/天氣|下雨/.test(input)) {
@@ -35,6 +58,38 @@ const stateOrder: PetState[] = [
   "happy",
   "error",
 ];
+
+const actionOrder: PetAction[] = ["wave", "stretch", "dance", "doze"];
+
+const actionStatus: Record<
+  PetAction,
+  { label: string; buttonLabel: string; detail: string; duration: number }
+> = {
+  wave: {
+    label: "向你招手",
+    buttonLabel: "招手",
+    detail: "收到你的觀測訊號",
+    duration: 2_400,
+  },
+  stretch: {
+    label: "伸展中",
+    buttonLabel: "伸展",
+    detail: "舒展一下星際斗篷",
+    duration: 2_500,
+  },
+  dance: {
+    label: "星光舞",
+    buttonLabel: "星光舞",
+    detail: "跟著軌道節拍轉動",
+    duration: 3_200,
+  },
+  doze: {
+    label: "打瞌睡",
+    buttonLabel: "瞌睡",
+    detail: "進入短暫星眠模式",
+    duration: 3_600,
+  },
+};
 
 const facingOrder: Facing[] = ["left", "center", "right"];
 
@@ -65,8 +120,14 @@ function App() {
   const [voiceNotice, setVoiceNotice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [facing, setFacing] = useState<Facing>("right");
+  const [lastFailedInput, setLastFailedInput] = useState("");
+  const [activeAction, setActiveAction] = useState<ActiveAction | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const previewTimerRef = useRef<number | null>(null);
+  const actionTimerRef = useRef<number | null>(null);
+  const actionRunRef = useRef(0);
+  const activeTaskRef = useRef<AbortController | null>(null);
+  const demoFailuresRef = useRef(new Set<string>());
 
   useEffect(() => {
     fetch("/api/voice-status")
@@ -94,6 +155,8 @@ function App() {
   }, [muted]);
 
   useEffect(() => {
+    if (activeAction) return;
+
     if (petState !== "idle") {
       setFacing(stateFacing[petState]);
       return;
@@ -107,20 +170,34 @@ function App() {
     }, 3_200 + Math.random() * 3_400);
 
     return () => window.clearTimeout(directionTimer);
-  }, [petState, facing]);
+  }, [activeAction, petState, facing]);
 
   useEffect(
     () => () => {
+      activeTaskRef.current?.abort();
       stopSpeaking();
       if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current);
+      if (actionTimerRef.current) window.clearTimeout(actionTimerRef.current);
     },
     [],
   );
 
+  const clearVisualPreview = () => {
+    if (previewTimerRef.current) {
+      window.clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    if (actionTimerRef.current) {
+      window.clearTimeout(actionTimerRef.current);
+      actionTimerRef.current = null;
+    }
+    setActiveAction(null);
+  };
+
   const previewMotion = (state: PetState) => {
     if (isBusy) return;
     stopSpeaking();
-    if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current);
+    clearVisualPreview();
     setPetState(state);
 
     if (state !== "idle") {
@@ -132,13 +209,30 @@ function App() {
     }
   };
 
-  const sendMessage = async (event: FormEvent) => {
-    event.preventDefault();
-    const cleanInput = input.trim();
-    if (!cleanInput || isBusy) return;
+  const previewAction = (action: PetAction) => {
+    if (isBusy) return;
+    stopSpeaking();
+    clearVisualPreview();
+    setPetState("idle");
+    setFacing("center");
 
-    setInput("");
+    const nextAction = { name: action, run: actionRunRef.current + 1 };
+    actionRunRef.current = nextAction.run;
+    setActiveAction(nextAction);
+    actionTimerRef.current = window.setTimeout(() => {
+      setActiveAction(null);
+      actionTimerRef.current = null;
+    }, actionStatus[action].duration);
+  };
+
+  const runAgentTask = async (cleanInput: string) => {
+    if (!cleanInput || activeTaskRef.current) return;
+
+    const controller = new AbortController();
+    activeTaskRef.current = controller;
+    clearVisualPreview();
     setIsBusy(true);
+    setLastFailedInput("");
     setVoiceNotice("");
     stopSpeaking();
     setMessages((current) => [
@@ -148,11 +242,12 @@ function App() {
     setPetState((state) => transitionPet(state, { type: "AGENT_STARTED" }));
 
     try {
-      await sleep(650);
+      await sleep(650, controller.signal);
       setPetState((state) => transitionPet(state, { type: "TOOL_STARTED" }));
-      await sleep(900);
+      await sleep(900, controller.signal);
 
-      if (cleanInput === "測試錯誤") {
+      if (cleanInput === "測試錯誤" && !demoFailuresRef.current.has(cleanInput)) {
+        demoFailuresRef.current.add(cleanInput);
         throw new Error("Demo error");
       }
 
@@ -163,35 +258,74 @@ function App() {
       ]);
       setPetState((state) => transitionPet(state, { type: "MESSAGE_READY" }));
       setIsBusy(false);
+      activeTaskRef.current = null;
 
       if (!muted) {
         await speak({
           text: reply,
           provider: voiceProvider,
           azureVoice: "zh-TW-HsiaoChenNeural",
-          onStart: () => setPetState("speaking"),
-          onEnd: () => setPetState("idle"),
+          onStart: () =>
+            setPetState((state) => transitionPet(state, { type: "VOICE_STARTED" })),
+          onEnd: () =>
+            setPetState((state) => transitionPet(state, { type: "VOICE_ENDED" })),
           onFallback: () => {
             setVoiceProvider("browser");
             setVoiceNotice("雲端語音無法使用，已切換為裝置語音。 ");
           },
         });
       } else {
-        window.setTimeout(() => setPetState("idle"), 1_200);
+        window.setTimeout(
+          () => setPetState((state) => transitionPet(state, { type: "RESET" })),
+          1_200,
+        );
       }
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) return;
+
       setMessages((current) => [
         ...current,
         {
           id: Date.now() + 1,
           role: "assistant",
-          text: "這次示範遇到錯誤了。輸入其他內容就能重新開始。",
+          text: "這次示範遇到錯誤了。可以按「再試一次」，或輸入其他內容繼續。",
           time: "現在",
         },
       ]);
-      setPetState("error");
+      setLastFailedInput(cleanInput);
+      setPetState((state) => transitionPet(state, { type: "AGENT_FAILED" }));
       setIsBusy(false);
+      activeTaskRef.current = null;
     }
+  };
+
+  const sendMessage = (event: FormEvent) => {
+    event.preventDefault();
+    const cleanInput = input.trim();
+    if (!cleanInput || isBusy) return;
+
+    setInput("");
+    void runAgentTask(cleanInput);
+  };
+
+  const cancelTask = () => {
+    const activeTask = activeTaskRef.current;
+    if (!activeTask) return;
+
+    activeTaskRef.current = null;
+    activeTask.abort();
+    stopSpeaking();
+    setIsBusy(false);
+    setMessages((current) => [
+      ...current,
+      {
+        id: Date.now() + 1,
+        role: "assistant",
+        text: "已停止這次任務。準備好時，我們可以換個方向再試。",
+        time: "現在",
+      },
+    ]);
+    setPetState((state) => transitionPet(state, { type: "TASK_CANCELLED" }));
   };
 
   const tapPet = () => {
@@ -199,13 +333,49 @@ function App() {
     previewMotion("happy");
   };
 
+  const moveHabitat = (event: ReactPointerEvent<HTMLElement>) => {
+    if (
+      event.pointerType === "touch" ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const horizontal = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const vertical = (event.clientY - bounds.top) / bounds.height - 0.5;
+
+    event.currentTarget.style.setProperty("--pet-x", `${horizontal * 10}px`);
+    event.currentTarget.style.setProperty("--pet-y", `${vertical * 7}px`);
+    event.currentTarget.style.setProperty("--orbit-x", `${horizontal * -15}px`);
+    event.currentTarget.style.setProperty("--orbit-y", `${vertical * -11}px`);
+    event.currentTarget.style.setProperty("--drift-x", `${horizontal * 22}px`);
+    event.currentTarget.style.setProperty("--drift-y", `${vertical * 16}px`);
+  };
+
+  const resetHabitat = (event: ReactPointerEvent<HTMLElement>) => {
+    event.currentTarget.style.setProperty("--pet-x", "0px");
+    event.currentTarget.style.setProperty("--pet-y", "0px");
+    event.currentTarget.style.setProperty("--orbit-x", "0px");
+    event.currentTarget.style.setProperty("--orbit-y", "0px");
+    event.currentTarget.style.setProperty("--drift-x", "0px");
+    event.currentTarget.style.setProperty("--drift-y", "0px");
+  };
+
+  const displayedStatus = activeAction
+    ? actionStatus[activeAction.name]
+    : petStatus[petState];
+  const displayedIndex = activeAction
+    ? `A${actionOrder.indexOf(activeAction.name) + 1}`
+    : String(stateOrder.indexOf(petState) + 1).padStart(2, "0");
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true">✦</div>
           <div>
-            <p className="eyebrow">Agent companion / prototype 0.4</p>
+            <p className="eyebrow">Agent companion / prototype 0.8</p>
             <h1>Nova 的觀測站</h1>
           </div>
         </div>
@@ -240,7 +410,9 @@ function App() {
               <p className="eyebrow">Live channel</p>
               <h2>和 Agent 一起工作</h2>
             </div>
-            <span className="connection-label"><span />已連線</span>
+            <span className={`connection-label ${isBusy ? "is-active" : ""}`}>
+              <span />{isBusy ? petStatus[petState].label : "原型模式"}
+            </span>
           </div>
 
           <div className="transcript" ref={transcriptRef} aria-live="polite">
@@ -255,7 +427,9 @@ function App() {
             ))}
             {isBusy && (
               <article className="message assistant is-pending">
-                <div className="message-meta"><span>Nova</span><span>處理中</span></div>
+                <div className="message-meta">
+                  <span>Nova</span><span>{petStatus[petState].label}</span>
+                </div>
                 <div className="typing-dots" aria-label="Nova 正在輸入">
                   <span /><span /><span />
                 </div>
@@ -279,7 +453,11 @@ function App() {
               placeholder="交給 Nova 一件事…"
               value={input}
               disabled={isBusy}
-              onFocus={() => !isBusy && setPetState("listening")}
+              onFocus={() => {
+                if (isBusy) return;
+                clearVisualPreview();
+                setPetState("listening");
+              }}
               onBlur={() => !input && petState === "listening" && setPetState("idle")}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
@@ -289,28 +467,64 @@ function App() {
                 }
               }}
             />
-            <button className="send-button" type="submit" disabled={!input.trim() || isBusy}>
-              <span>送出</span><span aria-hidden="true">↗</span>
-            </button>
+            {isBusy ? (
+              <button
+                className="send-button cancel-button"
+                type="button"
+                aria-label="停止目前任務"
+                onClick={cancelTask}
+              >
+                <span>停止</span><span aria-hidden="true">■</span>
+              </button>
+            ) : (
+              <button
+                className="send-button"
+                type="submit"
+                aria-label="送出訊息"
+                disabled={!input.trim()}
+              >
+                <span>送出</span><span aria-hidden="true">↗</span>
+              </button>
+            )}
           </form>
+          {lastFailedInput && !isBusy && (
+            <div className="recovery-banner" role="status">
+              <span>上次任務沒有完成</span>
+              <button type="button" onClick={() => void runAgentTask(lastFailedInput)}>
+                再試一次
+              </button>
+            </div>
+          )}
           {voiceNotice && <p className="voice-notice">{voiceNotice}</p>}
         </section>
 
-        <aside className={`habitat state-${petState}`} aria-label="Nova 寵物狀態">
+        <aside
+          className={`habitat state-${petState}${activeAction ? ` action-${activeAction.name}` : ""}`}
+          aria-label="Nova 寵物狀態"
+          onPointerMove={moveHabitat}
+          onPointerLeave={resetHabitat}
+        >
           <div className="habitat-grid" aria-hidden="true" />
+          <div className="cosmic-drift" aria-hidden="true">
+            <i /><i /><i /><i /><i /><i /><i /><i /><i /><i />
+          </div>
           <div className="orbit orbit-one" aria-hidden="true" />
           <div className="orbit orbit-two" aria-hidden="true" />
           <div className="state-readout">
-            <span className="state-index">
-              {String(stateOrder.indexOf(petState) + 1).padStart(2, "0")}
-            </span>
+            <span className="state-index">{displayedIndex}</span>
             <div>
-              <p>{petStatus[petState].label}</p>
-              <span>{petStatus[petState].detail}</span>
+              <p>{displayedStatus.label}</p>
+              <span>{displayedStatus.detail}</span>
             </div>
           </div>
 
           <button className="pet-stage" type="button" onClick={tapPet} aria-label="摸摸 Nova">
+            <span className="pet-shadow" aria-hidden="true" />
+            <span
+              className="state-pulse"
+              aria-hidden="true"
+              key={activeAction ? `action-${activeAction.run}` : petState}
+            />
             <span className="pet-glow" aria-hidden="true" />
             <span className="thought-dots" aria-hidden="true"><i /><i /><i /></span>
             <span className="signal-ring signal-left" aria-hidden="true" />
@@ -319,8 +533,14 @@ function App() {
             <span className="spark-field" aria-hidden="true">
               <i /><i /><i /><i /><i /><i />
             </span>
+            <span className="sleep-notes" aria-hidden="true">
+              <i>Z</i><i>Z</i><i>Z</i>
+            </span>
             <span className={`pet-direction facing-${facing}`}>
-              <span className="pet-sprite-stack">
+              <span
+                className="pet-sprite-stack"
+                key={activeAction ? `action-${activeAction.run}` : "state"}
+              >
                 <img
                   className="pet-sprite rig-tail"
                   src="/assets/nova-pet-tail.png"
@@ -345,14 +565,26 @@ function App() {
                   alt="紫藍色的星際狐狸貓 Nova"
                 />
                 <img
-                  className="pet-sprite rig-arm rig-arm-left"
+                  className="pet-sprite rig-arm rig-arm-closed rig-arm-left"
                   src="/assets/nova-pet-hand-left.png"
                   alt=""
                   aria-hidden="true"
                 />
                 <img
-                  className="pet-sprite rig-arm rig-arm-right"
+                  className="pet-sprite rig-arm rig-arm-closed rig-arm-right"
                   src="/assets/nova-pet-hand-right.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <img
+                  className="pet-sprite rig-arm rig-arm-open rig-arm-left"
+                  src="/assets/nova-pet-hand-open-left.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <img
+                  className="pet-sprite rig-arm rig-arm-open rig-arm-right"
+                  src="/assets/nova-pet-hand-open-right.png"
                   alt=""
                   aria-hidden="true"
                 />
@@ -405,21 +637,40 @@ function App() {
             </span>
           </button>
 
-          <div className="motion-lab" aria-label="動畫試播">
-            <span>Motion</span>
-            <div>
-              {stateOrder.map((state) => (
-                <button
-                  type="button"
-                  key={state}
-                  disabled={isBusy}
-                  className={state === petState ? "active" : ""}
-                  aria-pressed={state === petState}
-                  onClick={() => previewMotion(state)}
-                >
-                  {petStatus[state].label.replace("中", "")}
-                </button>
-              ))}
+          <div className="motion-lab" aria-label="動畫與動作試播">
+            <div className="motion-row">
+              <span>State</span>
+              <div>
+                {stateOrder.map((state) => (
+                  <button
+                    type="button"
+                    key={state}
+                    disabled={isBusy}
+                    className={!activeAction && state === petState ? "active" : ""}
+                    aria-pressed={!activeAction && state === petState}
+                    onClick={() => previewMotion(state)}
+                  >
+                    {petStatus[state].label.replace("中", "")}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="motion-row action-row">
+              <span>Action</span>
+              <div>
+                {actionOrder.map((action) => (
+                  <button
+                    type="button"
+                    key={action}
+                    disabled={isBusy}
+                    className={activeAction?.name === action ? "active" : ""}
+                    aria-pressed={activeAction?.name === action}
+                    onClick={() => previewAction(action)}
+                  >
+                    {actionStatus[action].buttonLabel}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

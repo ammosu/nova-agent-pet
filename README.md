@@ -9,12 +9,17 @@ Repository：<https://github.com/ammosu/nova-agent-pet>
 - 七種 Agent 狀態：待機、聆聽、思考、執行、說話、完成、錯誤。
 - 尾巴、左右耳、左右手、雙眼、天線與嘴型獨立動畫。
 - 待機時自然切換角色方向與視線。
+- 觀測艙具有游標視差、動態星塵、角色落地陰影與狀態切換脈衝。
+- 雙手採用非對稱表演節奏，依聆聽、思考、執行、說話、完成與錯誤狀態切換手勢。
+- 四種獨立角色動作：招手、伸展、星光舞與瞌睡；不會混入正式 Agent 狀態機。
 - 可從介面試播每種動畫狀態。
+- 執行中的模擬任務可隨時停止，失敗後可從介面重新嘗試。
 - 瀏覽器 `SpeechSynthesis` 中文語音 fallback。
 - 可選 Azure Speech 台灣中文語音。
 - 響應式介面與 `prefers-reduced-motion` 支援。
 
 目前仍是前端原型：Agent 回覆與工具執行流程由 `src/App.tsx` 模擬，尚未連接正式 Agent 後端。
+輸入 `測試錯誤` 可觸發一次可恢復錯誤，供驗證錯誤動畫與重新嘗試流程。
 
 ## 系統需求
 
@@ -95,6 +100,7 @@ PORT=5173
 | `VOICE_STARTED` | `speaking` |
 | `VOICE_ENDED` | `idle` |
 | `AGENT_FAILED` | `error` |
+| `TASK_CANCELLED` | `idle` |
 | `PET_TAPPED` | `happy` |
 | `RESET` | `idle` |
 
@@ -122,6 +128,7 @@ agent.on("message-ready", () => {
 ├── scripts/
 │   ├── create_mouthless_base.py
 │   ├── extract_eye_layers.py
+│   ├── extract_open_hand_layers.py
 │   └── extract_rig_parts.py
 ├── src/
 │   ├── App.tsx                # UI、模擬 Agent 流程、角色圖層
@@ -143,6 +150,7 @@ agent.on("message-ready", () => {
 - `nova-pet-tail.png`
 - `nova-pet-ear-left.png`、`nova-pet-ear-right.png`
 - `nova-pet-hand-left.png`、`nova-pet-hand-right.png`
+- `nova-pet-hand-open-left.png`、`nova-pet-hand-open-right.png`
 - `nova-pet-eye-left.png`、`nova-pet-eye-right.png`
 - `nova-pet-antenna-alpha.png`
 - `nova-pet-idle-mouth.png`
@@ -159,7 +167,11 @@ python3 -m pip install Pillow numpy
 python3 scripts/extract_eye_layers.py
 python3 scripts/create_mouthless_base.py
 python3 scripts/extract_rig_parts.py
+python3 scripts/extract_open_hand_layers.py
 ```
+
+`nova-pet-open-paws-source.png` 是以原角色為參考生成的開掌來源影格，只供
+`extract_open_hand_layers.py` 產生兩張透明開掌圖層；不會取代原始母圖。
 
 重新產生後，請在瀏覽器依序檢查待機、思考、執行、說話、完成與錯誤狀態，確認沒有方格、重影或相鄰部件跟著移動。
 

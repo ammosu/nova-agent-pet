@@ -15,6 +15,7 @@ export type PetEvent =
   | { type: "VOICE_STARTED" }
   | { type: "VOICE_ENDED" }
   | { type: "AGENT_FAILED" }
+  | { type: "TASK_CANCELLED" }
   | { type: "PET_TAPPED" }
   | { type: "RESET" };
 
@@ -33,6 +34,7 @@ export const transitionPet = (_state: PetState, event: PetEvent): PetState => {
       return "speaking";
     case "AGENT_FAILED":
       return "error";
+    case "TASK_CANCELLED":
     case "VOICE_ENDED":
     case "RESET":
       return "idle";

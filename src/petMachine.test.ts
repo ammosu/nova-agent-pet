@@ -17,4 +17,9 @@ describe("transitionPet", () => {
     expect(transitionPet("working", { type: "AGENT_FAILED" })).toBe("error");
     expect(transitionPet("error", { type: "RESET" })).toBe("idle");
   });
+
+  it("returns to idle when a task is cancelled", () => {
+    expect(transitionPet("thinking", { type: "TASK_CANCELLED" })).toBe("idle");
+    expect(transitionPet("working", { type: "TASK_CANCELLED" })).toBe("idle");
+  });
 });
