@@ -2,7 +2,7 @@ from collections import deque
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +17,7 @@ EYES = {
 }
 
 MOUTH = (0.52, 0.40, 0.66, 0.52)
-IDLE_MOUTH = (0.54, 0.43, 0.63, 0.46)
+IDLE_MOUTH = (0.54, 0.442, 0.63, 0.46)
 
 
 def largest_component(mask: np.ndarray) -> np.ndarray:
@@ -68,16 +68,45 @@ def largest_component(mask: np.ndarray) -> np.ndarray:
     return result
 
 
-def eye_silhouette(component: np.ndarray) -> np.ndarray:
-    silhouette = np.zeros_like(component, dtype=np.uint8)
-    rows = np.flatnonzero(component.any(axis=1))
+def fill_holes(mask: np.ndarray) -> np.ndarray:
+    height, width = mask.shape
+    outside = np.zeros_like(mask, dtype=bool)
+    queue = deque()
 
-    for y in rows:
-        columns = np.flatnonzero(component[y])
-        if columns.size:
-            silhouette[y, columns.min() : columns.max() + 1] = 255
+    for x in range(width):
+        for y in (0, height - 1):
+            if not mask[y, x] and not outside[y, x]:
+                outside[y, x] = True
+                queue.append((y, x))
+    for y in range(height):
+        for x in (0, width - 1):
+            if not mask[y, x] and not outside[y, x]:
+                outside[y, x] = True
+                queue.append((y, x))
 
-    return silhouette
+    while queue:
+        current_y, current_x = queue.popleft()
+        for next_y, next_x in (
+            (current_y - 1, current_x),
+            (current_y + 1, current_x),
+            (current_y, current_x - 1),
+            (current_y, current_x + 1),
+        ):
+            if (
+                0 <= next_y < height
+                and 0 <= next_x < width
+                and not mask[next_y, next_x]
+                and not outside[next_y, next_x]
+            ):
+                outside[next_y, next_x] = True
+                queue.append((next_y, next_x))
+
+    return mask | (~mask & ~outside)
+
+
+def clear_transparent_rgb(rgba: np.ndarray) -> np.ndarray:
+    rgba[rgba[..., 3] == 0, :3] = 0
+    return rgba
 
 
 def dilate(mask: np.ndarray, iterations: int = 2) -> np.ndarray:
@@ -106,13 +135,26 @@ def extract_eye(source: Image.Image, bounds: tuple[float, float, float, float]) 
     luminance = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
     dark_pixels = (luminance < 125) & (crop[..., 3] > 0)
     component = largest_component(dark_pixels)
-    silhouette = eye_silhouette(component)
+    silhouette = Image.fromarray(fill_holes(component).astype(np.uint8) * 255)
+    silhouette = silhouette.filter(ImageFilter.MaxFilter(3))
+    silhouette = silhouette.filter(ImageFilter.GaussianBlur(radius=0.4))
 
     output = np.zeros_like(rgba)
     eye_pixels = crop.copy()
-    eye_pixels[..., 3] = np.minimum(eye_pixels[..., 3], silhouette)
+    eye_pixels[..., 3] = np.minimum(eye_pixels[..., 3], np.asarray(silhouette))
+    eye_colors = eye_pixels[..., :3].astype(np.int16)
+    red, green, blue = [eye_colors[..., channel] for channel in range(3)]
+    face_cream = (
+        (red > 180)
+        & (green > 140)
+        & (blue > 90)
+        & (blue < 225)
+        & ((red - blue) > 20)
+        & ((red - blue) < 120)
+    )
+    eye_pixels[face_cream, 3] = 0
     output[y0:y1, x0:x1] = eye_pixels
-    return Image.fromarray(output)
+    return Image.fromarray(clear_transparent_rgb(output))
 
 
 def extract_eyelid(source: Image.Image, bounds: tuple[float, float, float, float]) -> Image.Image:
@@ -137,7 +179,7 @@ def extract_eyelid(source: Image.Image, bounds: tuple[float, float, float, float
         0,
     )
     output[y0:y1, x0:x1] = eyelid_pixels
-    return Image.fromarray(output)
+    return Image.fromarray(clear_transparent_rgb(output))
 
 
 def extract_dark_region(source: Image.Image, bounds: tuple[float, float, float, float]) -> Image.Image:
@@ -161,7 +203,7 @@ def extract_dark_region(source: Image.Image, bounds: tuple[float, float, float, 
         0,
     )
     output[y0:y1, x0:x1] = feature_pixels
-    return Image.fromarray(output)
+    return Image.fromarray(clear_transparent_rgb(output))
 
 
 def main() -> None:

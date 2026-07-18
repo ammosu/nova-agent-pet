@@ -469,15 +469,19 @@ h3 { font-size: 18px; }
   height: 92%;
   display: grid;
   place-items: center;
-  transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: 50% 78%;
+  transition: transform 680ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
 }
 
 .pet-direction.facing-left {
-  transform: translate(calc(-4% + var(--pet-x)), var(--pet-y)) scaleX(-1);
+  transform: translate(calc(-2.8% + var(--pet-x)), var(--pet-y)) rotate(-1.25deg);
 }
-.pet-direction.facing-center { transform: translate(var(--pet-x), var(--pet-y)) scaleX(1); }
+.pet-direction.facing-center {
+  transform: translate(var(--pet-x), var(--pet-y)) rotate(0deg);
+}
 .pet-direction.facing-right {
-  transform: translate(calc(4% + var(--pet-x)), var(--pet-y)) scaleX(1);
+  transform: translate(calc(2.8% + var(--pet-x)), var(--pet-y)) rotate(1.25deg);
 }
 
 .pet-sprite-stack {
@@ -504,6 +508,64 @@ h3 { font-size: 18px; }
 .pet-base {
   z-index: 2;
   opacity: 1;
+}
+
+.rig-cloth {
+  opacity: 1;
+  filter: none;
+  will-change: transform;
+  animation: cloth-follow var(--cloth-duration, 4.8s) var(--cloth-delay, 0s)
+    cubic-bezier(0.45, 0, 0.2, 1) infinite alternate;
+}
+
+.rig-cloak { z-index: 1; }
+
+.rig-cloak-left {
+  --cloth-duration: 5.6s;
+  --cloth-delay: -1.4s;
+  --cloth-from-x: -0.08%;
+  --cloth-from-y: 0.08%;
+  --cloth-from-rotate: -0.8deg;
+  --cloth-to-x: 0.14%;
+  --cloth-to-y: -0.05%;
+  --cloth-to-rotate: 1.4deg;
+  transform-origin: 42% 57%;
+}
+
+.rig-cloak-right {
+  --cloth-duration: 5.2s;
+  --cloth-delay: -2.2s;
+  --cloth-from-x: 0.08%;
+  --cloth-from-y: 0.05%;
+  --cloth-from-rotate: 0.7deg;
+  --cloth-to-x: -0.12%;
+  --cloth-to-y: -0.06%;
+  --cloth-to-rotate: -1.25deg;
+  transform-origin: 69% 57%;
+}
+
+.rig-robe { z-index: 2; }
+
+.rig-robe-front {
+  opacity: 1;
+}
+
+.rig-collar { z-index: 3; }
+
+.rig-collar-front {
+  opacity: 1;
+}
+
+.rig-pendant {
+  z-index: 4;
+  --cloth-duration: 3.8s;
+  --cloth-delay: -1.8s;
+  --cloth-from-x: -0.04%;
+  --cloth-from-rotate: -1.4deg;
+  --cloth-to-x: 0.04%;
+  --cloth-to-y: 0.05%;
+  --cloth-to-rotate: 1.4deg;
+  transform-origin: 59% 55%;
 }
 
 .rig-tail {
@@ -553,6 +615,19 @@ h3 { font-size: 18px; }
   filter: none;
   animation: gaze-wander 6.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
 }
+
+.rig-eyes-direction {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  pointer-events: none;
+  transform: translateX(0);
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.facing-left .rig-eyes-direction { transform: translateX(-1.35%); }
+.facing-right .rig-eyes-direction { transform: translateX(1.35%); }
 
 .rig-antenna {
   z-index: 5;
@@ -668,6 +743,160 @@ h3 { font-size: 18px; }
 .state-speaking .pet-sprite-stack { animation: pet-talk 420ms ease-in-out infinite alternate; }
 .state-speaking .pet-speaking { animation: mouth-frame 420ms steps(1, end) infinite; }
 .state-speaking .rig-mouth-idle { animation: idle-mouth-frame 420ms steps(1, end) infinite; }
+
+.state-listening .rig-cloak { --cloth-duration: 1.7s; }
+.state-listening .rig-pendant { --cloth-duration: 1.9s; }
+
+.state-thinking .rig-cloak {
+  --cloth-duration: 2.8s;
+  --cloth-to-y: -0.18%;
+}
+.state-thinking .rig-pendant {
+  --cloth-duration: 1.8s;
+  --cloth-from-rotate: -2.2deg;
+  --cloth-to-rotate: 2.2deg;
+}
+
+.state-working .rig-cloak { --cloth-duration: 760ms; }
+.state-working .rig-cloak-left {
+  --cloth-from-x: -2px;
+  --cloth-from-y: 2px;
+  --cloth-from-rotate: -2.2deg;
+  --cloth-to-x: 3px;
+  --cloth-to-y: -3px;
+  --cloth-to-rotate: 2.8deg;
+}
+.state-working .rig-cloak-right {
+  --cloth-from-x: 2px;
+  --cloth-from-y: -2px;
+  --cloth-from-rotate: 2deg;
+  --cloth-to-x: -3px;
+  --cloth-to-y: 3px;
+  --cloth-to-rotate: -2.6deg;
+}
+.state-working .rig-pendant {
+  --cloth-duration: 620ms;
+  --cloth-from-x: -2px;
+  --cloth-from-rotate: -6deg;
+  --cloth-to-x: 2px;
+  --cloth-to-y: 2px;
+  --cloth-to-rotate: 6deg;
+}
+
+.state-speaking .rig-cloak { --cloth-duration: 1.35s; }
+.state-speaking .rig-pendant { --cloth-duration: 880ms; }
+
+.state-happy .rig-cloak-left {
+  animation: cloth-happy-cloak-left 980ms cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+.state-happy .rig-cloak-right {
+  animation: cloth-happy-cloak-right 980ms cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+.state-happy .rig-pendant {
+  animation: cloth-happy-pendant 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+
+.state-error .rig-cloth {
+  --cloth-duration: 520ms;
+  --cloth-to-y: 0.28%;
+  --cloth-to-rotate: 0deg;
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease-out;
+}
+
+.action-wave .rig-cloth {
+  animation: cloth-action-wave 2.4s cubic-bezier(0.45, 0, 0.2, 1) 1 both;
+}
+.action-wave .rig-cloak-left {
+  --action-x: 7px;
+  --action-y: 5px;
+  --action-rotate: 5deg;
+  --action-rebound-rotate: -3.5deg;
+}
+.action-wave .rig-cloak-right {
+  --action-x: 4px;
+  --action-y: 3px;
+  --action-rotate: -3deg;
+  --action-rebound-rotate: 2deg;
+}
+.action-wave .rig-pendant {
+  --action-x: 4px;
+  --action-y: 3px;
+  --action-rotate: 10deg;
+  --action-rebound-rotate: -8deg;
+}
+
+.action-stretch .rig-cloth {
+  animation: cloth-action-stretch 2.5s cubic-bezier(0.45, 0, 0.2, 1) 1 both;
+}
+.action-stretch .rig-cloak-left {
+  --action-x: -9px;
+  --action-y: -9px;
+  --action-rotate: -7deg;
+  --action-settle-rotate: 2.5deg;
+}
+.action-stretch .rig-cloak-right {
+  --action-x: 9px;
+  --action-y: -9px;
+  --action-rotate: 7deg;
+  --action-settle-rotate: -2.5deg;
+}
+.action-stretch .rig-pendant {
+  --action-y: -10px;
+  --action-rotate: 6deg;
+  --action-settle-rotate: -5deg;
+}
+
+.action-dance .rig-cloth {
+  animation: cloth-action-dance 700ms cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+.action-dance .rig-cloak-left {
+  --action-from-x: 8px;
+  --action-from-y: 5px;
+  --action-from-rotate: 6deg;
+  --action-to-x: -8px;
+  --action-to-y: -6px;
+  --action-to-rotate: -6deg;
+}
+.action-dance .rig-cloak-right {
+  --action-from-x: -8px;
+  --action-from-y: -5px;
+  --action-from-rotate: -6deg;
+  --action-to-x: 8px;
+  --action-to-y: 6px;
+  --action-to-rotate: 6deg;
+}
+.action-dance .rig-pendant {
+  --action-from-x: 5px;
+  --action-from-y: 4px;
+  --action-from-rotate: 14deg;
+  --action-to-x: -5px;
+  --action-to-y: -4px;
+  --action-to-rotate: -14deg;
+}
+
+.action-doze .rig-cloth {
+  animation: cloth-action-doze 3.6s ease-in-out 1 both;
+}
+.action-doze .rig-cloak-left {
+  --action-x: -3px;
+  --action-y: 8px;
+  --action-rotate: -3deg;
+  --action-mid-rotate: 1deg;
+}
+.action-doze .rig-cloak-right {
+  --action-x: 3px;
+  --action-y: 8px;
+  --action-rotate: 3deg;
+  --action-mid-rotate: -1deg;
+}
+.action-doze .rig-pendant {
+  --action-x: 2px;
+  --action-y: 7px;
+  --action-rotate: 5deg;
+  --action-mid-rotate: -2deg;
+}
 
 .state-listening .rig-tail { animation: tail-listen 1.3s ease-in-out infinite alternate; }
 .state-listening .rig-arm-left {
@@ -1054,6 +1283,83 @@ h3 { font-size: 18px; }
 }
 
 @keyframes typing { to { transform: translateY(-4px); opacity: 0.45; } }
+@keyframes cloth-follow {
+  from {
+    transform: translate(
+      var(--cloth-from-x, 0%),
+      var(--cloth-from-y, 0%)
+    ) rotate(var(--cloth-from-rotate, 0deg));
+  }
+  to {
+    transform: translate(
+      var(--cloth-to-x, 0%),
+      var(--cloth-to-y, 0%)
+    ) rotate(var(--cloth-to-rotate, 0deg));
+  }
+}
+@keyframes cloth-happy-cloak-left {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  22% { transform: translate(-2px, 4px) rotate(-2deg); }
+  48% { transform: translate(-6px, -5px) rotate(-6deg); }
+  68% { transform: translate(3px, 2px) rotate(2.5deg); }
+  84% { transform: translate(-1px, -1px) rotate(-1deg); }
+}
+@keyframes cloth-happy-cloak-right {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  22% { transform: translate(2px, 4px) rotate(2deg); }
+  48% { transform: translate(6px, -5px) rotate(6deg); }
+  68% { transform: translate(-3px, 2px) rotate(-2.5deg); }
+  84% { transform: translate(1px, -1px) rotate(1deg); }
+}
+@keyframes cloth-happy-pendant {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  24% { transform: translate(-1px, 4px) rotate(-6deg); }
+  48% { transform: translate(2px, -5px) rotate(10deg); }
+  68% { transform: translate(-1px, 2px) rotate(-5deg); }
+  84% { transform: translate(0, -1px) rotate(2deg); }
+}
+@keyframes cloth-action-wave {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  18% { transform: translate(0, 3px) rotate(var(--action-rebound-rotate, 0deg)); }
+  34%, 58% {
+    transform: translate(var(--action-x, 0), var(--action-y, 0))
+      rotate(var(--action-rotate, 0deg));
+  }
+  48%, 68% {
+    transform: translate(0, -2px) rotate(var(--action-rebound-rotate, 0deg));
+  }
+  84% { transform: translate(-1px, 2px) rotate(var(--action-rebound-rotate, 0deg)); }
+}
+@keyframes cloth-action-stretch {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  16% { transform: translate(0, 5px) rotate(var(--action-settle-rotate, 0deg)); }
+  42%, 64% {
+    transform: translate(var(--action-x, 0), var(--action-y, 0))
+      rotate(var(--action-rotate, 0deg));
+  }
+  80% { transform: translate(0, 5px) rotate(var(--action-settle-rotate, 0deg)); }
+  90% { transform: translate(0, -3px) rotate(0); }
+}
+@keyframes cloth-action-dance {
+  0%, 100% {
+    transform: translate(var(--action-from-x, 0), var(--action-from-y, 0))
+      rotate(var(--action-from-rotate, 0deg));
+  }
+  50% {
+    transform: translate(var(--action-to-x, 0), var(--action-to-y, 0))
+      rotate(var(--action-to-rotate, 0deg));
+  }
+}
+@keyframes cloth-action-doze {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  24%, 48%, 72%, 88% {
+    transform: translate(var(--action-x, 0), var(--action-y, 0))
+      rotate(var(--action-rotate, 0deg));
+  }
+  36%, 60% {
+    transform: translate(0, 4px) rotate(var(--action-mid-rotate, 0deg));
+  }
+}
 @keyframes mote-float {
   0%, 100% { transform: translate3d(0, 5px, 0) scale(0.72); }
   50% { transform: translate3d(3px, -8px, 0) scale(1.22); opacity: 0.76; }
@@ -1377,5 +1683,10 @@ h3 { font-size: 18px; }
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .pet-direction,
+  .rig-eyes-direction {
+    transition-duration: 0.01ms !important;
   }
 }

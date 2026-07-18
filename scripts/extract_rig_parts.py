@@ -17,45 +17,11 @@ PARTS = {
         (0.16, 0.68),
         (0.20, 0.76),
         (0.29, 0.81),
-        (0.42, 0.80),
-        (0.42, 0.70),
-        (0.37, 0.62),
+        (0.398, 0.80),
+        (0.398, 0.70),
+        (0.365, 0.62),
         (0.31, 0.56),
         (0.25, 0.52),
-    ],
-    "ear-left": [
-        (0.32, 0.10),
-        (0.44, 0.12),
-        (0.48, 0.23),
-        (0.45, 0.30),
-        (0.36, 0.29),
-        (0.31, 0.21),
-    ],
-    "ear-right": [
-        (0.66, 0.11),
-        (0.72, 0.12),
-        (0.75, 0.22),
-        (0.72, 0.29),
-        (0.64, 0.28),
-        (0.63, 0.20),
-    ],
-    "hand-left": [
-        (0.39, 0.61),
-        (0.44, 0.61),
-        (0.47, 0.64),
-        (0.47, 0.68),
-        (0.45, 0.70),
-        (0.41, 0.70),
-        (0.39, 0.67),
-    ],
-    "hand-right": [
-        (0.68, 0.61),
-        (0.72, 0.61),
-        (0.75, 0.64),
-        (0.75, 0.68),
-        (0.73, 0.70),
-        (0.69, 0.69),
-        (0.67, 0.66),
     ],
     "antenna": [
         (0.53, 0.09),
@@ -70,6 +36,21 @@ PARTS = {
     ],
 }
 
+HAND_BOUNDS = {
+    "hand-left": (0.36, 0.59, 0.50, 0.74),
+    "hand-right": (0.64, 0.59, 0.79, 0.74),
+}
+
+EAR_SPECS = {
+    "ear-left": ((220, 80, 350, 240), 14, 5),
+    "ear-right": ((480, 80, 570, 220), 5, 14),
+}
+
+
+def clear_transparent_rgb(rgba: np.ndarray) -> np.ndarray:
+    rgba[rgba[..., 3] == 0, :3] = 0
+    return rgba
+
 
 def extract_part(source: Image.Image, points: list[tuple[float, float]]) -> Image.Image:
     width, height = source.size
@@ -81,7 +62,7 @@ def extract_part(source: Image.Image, points: list[tuple[float, float]]) -> Imag
     rgba = np.asarray(source.convert("RGBA")).copy()
     source_alpha = rgba[..., 3]
     rgba[..., 3] = np.minimum(source_alpha, np.asarray(mask))
-    return Image.fromarray(rgba)
+    return Image.fromarray(clear_transparent_rgb(rgba))
 
 
 def largest_component(mask: np.ndarray) -> np.ndarray:
@@ -122,6 +103,132 @@ def largest_component(mask: np.ndarray) -> np.ndarray:
     return result
 
 
+def fill_holes(mask: np.ndarray) -> np.ndarray:
+    height, width = mask.shape
+    outside = np.zeros_like(mask, dtype=bool)
+    queue: deque[tuple[int, int]] = deque()
+
+    for x in range(width):
+        for y in (0, height - 1):
+            if not mask[y, x] and not outside[y, x]:
+                outside[y, x] = True
+                queue.append((y, x))
+    for y in range(height):
+        for x in (0, width - 1):
+            if not mask[y, x] and not outside[y, x]:
+                outside[y, x] = True
+                queue.append((y, x))
+
+    while queue:
+        current_y, current_x = queue.popleft()
+        for next_y, next_x in (
+            (current_y - 1, current_x),
+            (current_y + 1, current_x),
+            (current_y, current_x - 1),
+            (current_y, current_x + 1),
+        ):
+            if (
+                0 <= next_y < height
+                and 0 <= next_x < width
+                and not mask[next_y, next_x]
+                and not outside[next_y, next_x]
+            ):
+                outside[next_y, next_x] = True
+                queue.append((next_y, next_x))
+
+    return mask | (~mask & ~outside)
+
+
+def directional_dilate(
+    mask: np.ndarray,
+    upward: int,
+    leftward: int,
+    rightward: int,
+) -> np.ndarray:
+    height, width = mask.shape
+    result = np.zeros_like(mask, dtype=bool)
+    for offset_y in range(-upward, 1):
+        source_y0 = max(0, -offset_y)
+        source_y1 = min(height, height - offset_y)
+        target_y0 = source_y0 + offset_y
+        target_y1 = source_y1 + offset_y
+        for offset_x in range(-leftward, rightward + 1):
+            source_x0 = max(0, -offset_x)
+            source_x1 = min(width, width - offset_x)
+            target_x0 = source_x0 + offset_x
+            target_x1 = source_x1 + offset_x
+            result[target_y0:target_y1, target_x0:target_x1] |= mask[
+                source_y0:source_y1,
+                source_x0:source_x1,
+            ]
+    return result
+
+
+def extract_ear(
+    source: Image.Image,
+    bounds: tuple[int, int, int, int],
+    leftward: int,
+    rightward: int,
+) -> Image.Image:
+    rgba = np.asarray(source.convert("RGBA")).copy()
+    red, green, blue = [rgba[..., channel].astype(np.float32) for channel in range(3)]
+    warm_inner_ear = (
+        (rgba[..., 3] > 0)
+        & (red > 150)
+        & ((red - blue) > 35)
+        & (green > 80)
+    )
+    left, top, right, bottom = bounds
+    region = np.zeros_like(warm_inner_ear)
+    region[top:bottom, left:right] = warm_inner_ear[top:bottom, left:right]
+    component = largest_component(region)
+    silhouette = directional_dilate(
+        component,
+        upward=22,
+        leftward=leftward,
+        rightward=rightward,
+    )
+    mask = Image.fromarray(silhouette.astype(np.uint8) * 255)
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=0.5))
+    rgba[..., 3] = np.minimum(rgba[..., 3], np.asarray(mask))
+    return Image.fromarray(clear_transparent_rgb(rgba))
+
+
+def extract_hand(
+    source: Image.Image,
+    bounds: tuple[float, float, float, float],
+) -> Image.Image:
+    rgba = np.asarray(source.convert("RGBA")).copy()
+    height, width = rgba.shape[:2]
+    red, green, blue = [rgba[..., channel].astype(np.float32) for channel in range(3)]
+    skin = (
+        (rgba[..., 3] > 0)
+        & (red > 180)
+        & (green > 135)
+        & (blue > 100)
+        & (red > green)
+        & (green > blue)
+    )
+
+    left, top, right, bottom = bounds
+    region = np.zeros_like(skin)
+    region[
+        round(top * height) : round(bottom * height),
+        round(left * width) : round(right * width),
+    ] = skin[
+        round(top * height) : round(bottom * height),
+        round(left * width) : round(right * width),
+    ]
+    silhouette = fill_holes(largest_component(region))
+    mask = (
+        Image.fromarray(silhouette.astype(np.uint8) * 255)
+        .filter(ImageFilter.MaxFilter(5))
+        .filter(ImageFilter.GaussianBlur(radius=0.55))
+    )
+    rgba[..., 3] = np.minimum(rgba[..., 3], np.asarray(mask))
+    return Image.fromarray(clear_transparent_rgb(rgba))
+
+
 def extract_antenna(source: Image.Image) -> Image.Image:
     rgba = np.asarray(source.convert("RGBA")).copy()
     height, width = rgba.shape[:2]
@@ -147,7 +254,7 @@ def extract_antenna(source: Image.Image) -> Image.Image:
 
     mask = Image.fromarray(silhouette).filter(ImageFilter.GaussianBlur(radius=0.65))
     rgba[..., 3] = np.minimum(rgba[..., 3], np.asarray(mask))
-    return Image.fromarray(rgba)
+    return Image.fromarray(clear_transparent_rgb(rgba))
 
 
 def main() -> None:
@@ -157,6 +264,21 @@ def main() -> None:
         output = ROOT / f"public/assets/{filename}"
         part = extract_antenna(source) if name == "antenna" else extract_part(source, points)
         part.save(output)
+        print(f"Wrote {output.relative_to(ROOT)}")
+
+        if name == "antenna":
+            legacy_output = ROOT / "public/assets/nova-pet-antenna.png"
+            part.save(legacy_output)
+            print(f"Wrote {legacy_output.relative_to(ROOT)}")
+
+    for name, bounds in HAND_BOUNDS.items():
+        output = ROOT / f"public/assets/nova-pet-{name}.png"
+        extract_hand(source, bounds).save(output)
+        print(f"Wrote {output.relative_to(ROOT)}")
+
+    for name, (bounds, leftward, rightward) in EAR_SPECS.items():
+        output = ROOT / f"public/assets/nova-pet-{name}.png"
+        extract_ear(source, bounds, leftward, rightward).save(output)
         print(f"Wrote {output.relative_to(ROOT)}")
 
 

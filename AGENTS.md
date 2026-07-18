@@ -81,7 +81,7 @@ idle, listening, thinking, working, speaking, happy, error
 - 表情素材只保留眼瞼或嘴型，不得包含臉部膚色方塊。
 - 旋轉部件前要確認素材沒有包含頭部、袍身或相鄰角色區塊。
 
-目前的圖層順序是：尾巴／耳朵 → 身體 → 雙手 → 雙眼 → 天線／待機嘴 → 表情影格。修改 z-index 時要維持合理遮擋。
+目前的圖層順序是：尾巴／耳朵／披風後片 → 內層衣身體 → 袍身／領片 → 雙手／寶石 → 雙眼 → 天線／待機嘴 → 表情影格。修改 z-index 時要維持合理遮擋。
 
 ## 素材產生流程
 
@@ -92,11 +92,15 @@ python3 -m pip install Pillow numpy
 python3 scripts/extract_eye_layers.py
 python3 scripts/create_mouthless_base.py
 python3 scripts/extract_rig_parts.py
+python3 scripts/extract_clothing_layers.py
+python3 scripts/validate_asset_layers.py
 ```
 
 - `extract_eye_layers.py` 產生雙眼、待機嘴、眨眼、說話嘴與完成表情。
 - `create_mouthless_base.py` 產生無嘴角色底圖。
 - `extract_rig_parts.py` 產生尾巴、耳朵、雙手與天線。
+- `extract_clothing_layers.py` 從無嘴角色底圖產生披風後片、領片、袍身與寶石。
+- `validate_asset_layers.py` 驗證執行圖層的 Alpha 邊界、透明 RGB、碎片與相鄰部件污染。
 
 不要手動覆寫來源母圖。若輸出檔名改變，必須同步更新 `App.tsx` 與 README 素材清單。
 

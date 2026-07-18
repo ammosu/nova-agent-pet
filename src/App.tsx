@@ -560,9 +560,39 @@ function App() {
                   aria-hidden="true"
                 />
                 <img
+                  className="pet-sprite rig-cloth rig-cloak rig-cloak-left"
+                  src="/assets/nova-pet-cloak-back-left.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <img
+                  className="pet-sprite rig-cloth rig-cloak rig-cloak-right"
+                  src="/assets/nova-pet-cloak-back-right.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <img
                   className="pet-sprite pet-base rig-body"
-                  src="/assets/nova-pet-attention-base-mouthless.png"
+                  src="/assets/nova-pet-undercoat-base.png"
                   alt="紫藍色的星際狐狸貓 Nova"
+                />
+                <img
+                  className="pet-sprite rig-robe rig-robe-front"
+                  src="/assets/nova-pet-robe-front.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <img
+                  className="pet-sprite rig-collar rig-collar-front"
+                  src="/assets/nova-pet-collar-front.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <img
+                  className="pet-sprite rig-cloth rig-pendant"
+                  src="/assets/nova-pet-pendant.png"
+                  alt=""
+                  aria-hidden="true"
                 />
                 <img
                   className="pet-sprite rig-arm rig-arm-closed rig-arm-left"
@@ -588,18 +618,23 @@ function App() {
                   alt=""
                   aria-hidden="true"
                 />
-                <img
-                  className="pet-sprite rig-eye rig-eye-left"
-                  src="/assets/nova-pet-eye-left.png"
-                  alt=""
-                  aria-hidden="true"
-                />
-                <img
-                  className="pet-sprite rig-eye rig-eye-right"
-                  src="/assets/nova-pet-eye-right.png"
-                  alt=""
-                  aria-hidden="true"
-                />
+                <span className="rig-eyes-direction" aria-hidden="true">
+                  <img
+                    className="pet-sprite rig-eye rig-eye-left"
+                    src="/assets/nova-pet-eye-left.png"
+                    alt=""
+                  />
+                  <img
+                    className="pet-sprite rig-eye rig-eye-right"
+                    src="/assets/nova-pet-eye-right.png"
+                    alt=""
+                  />
+                  <img
+                    className="pet-sprite pet-face pet-blink"
+                    src="/assets/nova-pet-blink-eyes.png"
+                    alt=""
+                  />
+                </span>
                 <img
                   className="pet-sprite rig-antenna"
                   src="/assets/nova-pet-antenna-alpha.png"
@@ -609,12 +644,6 @@ function App() {
                 <img
                   className="pet-sprite rig-mouth-idle"
                   src="/assets/nova-pet-idle-mouth.png"
-                  alt=""
-                  aria-hidden="true"
-                />
-                <img
-                  className="pet-sprite pet-face pet-blink"
-                  src="/assets/nova-pet-blink-eyes.png"
                   alt=""
                   aria-hidden="true"
                 />

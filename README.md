@@ -1,13 +1,15 @@
 # Nova Agent Pet
 
-Nova 是一個可嵌入既有 Agent 網頁的互動寵物原型。角色會依 Agent 的處理狀態切換動作、表情與語音回應，並以獨立透明 PNG 圖層驅動尾巴、耳朵、雙手、眼睛、天線與嘴型。
+Nova 是一個可嵌入既有 Agent 網頁的互動寵物原型。角色會依 Agent 的處理狀態切換動作、表情與語音回應，並以獨立透明 PNG 圖層驅動尾巴、耳朵、衣服、雙手、眼睛、天線與嘴型。
 
 Repository：<https://github.com/ammosu/nova-agent-pet>
 
 ## 功能
 
 - 七種 Agent 狀態：待機、聆聽、思考、執行、說話、完成、錯誤。
-- 尾巴、左右耳、左右手、雙眼、天線與嘴型獨立動畫。
+- 尾巴、左右耳、左右披風、完整前領片、完整正面袍身、寶石、雙手、雙眼、天線與嘴型皆使用獨立透明圖層。
+- 正面袍身與領片固定跟隨內層衣身，不會在招手、伸展、完成或星光舞時產生第二次位移。
+- 後方披風與寶石使用不同支點、週期與相位延遲；招手、伸展、星光舞與瞌睡另有拖曳、甩動與回彈時間軸。
 - 待機時自然切換角色方向與視線。
 - 觀測艙具有游標視差、動態星塵、角色落地陰影與狀態切換脈衝。
 - 雙手採用非對稱表演節奏，依聆聽、思考、執行、說話、完成與錯誤狀態切換手勢。
@@ -127,13 +129,16 @@ agent.on("message-ready", () => {
 ├── public/assets/             # 角色母圖與執行中透明分件
 ├── scripts/
 │   ├── create_mouthless_base.py
+│   ├── extract_clothing_layers.py
 │   ├── extract_eye_layers.py
 │   ├── extract_open_hand_layers.py
-│   └── extract_rig_parts.py
+│   ├── extract_rig_parts.py
+│   └── validate_asset_layers.py
 ├── src/
 │   ├── App.tsx                # UI、模擬 Agent 流程、角色圖層
 │   ├── petMachine.ts          # Agent 狀態機
 │   ├── petMachine.test.ts     # 狀態轉移測試
+│   ├── styles.test.ts         # 固定衣物圖層的動畫回歸測試
 │   ├── voice.ts               # Azure／瀏覽器語音播放
 │   └── styles.css             # 版面與角色動畫
 ├── server.mjs                 # Express、Vite middleware、Azure TTS proxy
@@ -146,9 +151,13 @@ agent.on("message-ready", () => {
 
 目前使用中的角色素材包括：
 
-- `nova-pet-attention-base-mouthless.png`
+- `nova-pet-undercoat-base.png`
 - `nova-pet-tail.png`
 - `nova-pet-ear-left.png`、`nova-pet-ear-right.png`
+- `nova-pet-cloak-back-left.png`、`nova-pet-cloak-back-right.png`
+- `nova-pet-collar-front.png`
+- `nova-pet-robe-front.png`
+- `nova-pet-pendant.png`
 - `nova-pet-hand-left.png`、`nova-pet-hand-right.png`
 - `nova-pet-hand-open-left.png`、`nova-pet-hand-open-right.png`
 - `nova-pet-eye-left.png`、`nova-pet-eye-right.png`
@@ -168,10 +177,27 @@ python3 scripts/extract_eye_layers.py
 python3 scripts/create_mouthless_base.py
 python3 scripts/extract_rig_parts.py
 python3 scripts/extract_open_hand_layers.py
+python3 scripts/extract_clothing_layers.py
+python3 scripts/validate_asset_layers.py
 ```
 
 `nova-pet-open-paws-source.png` 是以原角色為參考生成的開掌來源影格，只供
 `extract_open_hand_layers.py` 產生兩張透明開掌圖層；不會取代原始母圖。
+
+`nova-pet-undercoat-base.png` 是保留角色頭部與輪廓、將外袍下方整理成深靛色
+內層衣的 Rig 底圖。`extract_clothing_layers.py` 會從
+`nova-pet-attention-base-mouthless.png` 重新產生披風、領片、袍身與寶石，不會
+覆寫原始母圖或內層衣底圖。
+
+外袍前片與領片雖然是獨立 PNG，以便維持正確的前後遮擋，但它們屬於身體的固定
+衣物，必須與 `nova-pet-undercoat-base.png` 使用同一條移動時間軸；不可加入
+`rig-cloth` 或額外的上下位移。只有身體後方的披風片與以頸部為錨點的寶石可保留
+獨立擺動。
+
+`validate_asset_layers.py` 會檢查所有執行圖層的透明四角、Alpha 邊界、
+脫離碎片、透明像素 RGB 殘留，以及耳朵、雙手、雙眼、領片、袍身與寶石之間的
+已知污染區。重新產生素材後應先看到 `All runtime asset layers passed.`，再進入
+瀏覽器檢查動畫。
 
 重新產生後，請在瀏覽器依序檢查待機、思考、執行、說話、完成與錯誤狀態，確認沒有方格、重影或相鄰部件跟著移動。
 
