@@ -35,3 +35,34 @@ describe("fixed front garments", () => {
     expect(independentlyAnimatedGarments).toEqual([]);
   });
 });
+
+describe("layered eye rig", () => {
+  it.each([
+    "nova-pet-eye-depth-left.png",
+    "nova-pet-eye-depth-right.png",
+    "nova-pet-eye-pupil-left.png",
+    "nova-pet-eye-pupil-right.png",
+    "nova-pet-eye-glint-left.png",
+    "nova-pet-eye-glint-right.png",
+    "nova-pet-blink-left.png",
+    "nova-pet-blink-right.png",
+  ])("renders %s as an independent runtime layer", (filename) => {
+    expect(appSource).toContain(`/assets/${filename}`);
+  });
+
+  it("keeps pointer focus variables neutral in reduced motion", () => {
+    expect(appSource).toContain('setProperty("--eye-focus-x"');
+    expect(appSource).toContain('setProperty("--eye-focus-y"');
+    expect(styles).toMatch(/--eye-focus-x:\s*0px\s*!important/);
+    expect(styles).toMatch(/--eye-focus-y:\s*0px\s*!important/);
+  });
+
+  it("uses different pupil ranges for listening and thinking", () => {
+    expect(styles).toMatch(
+      /\.state-listening \.rig-open-eyes\s*\{[^}]*--pupil-min:\s*1\.02;[^}]*--pupil-max:\s*1\.2;/s,
+    );
+    expect(styles).toMatch(
+      /\.state-thinking \.rig-open-eyes\s*\{[^}]*--pupil-min:\s*0\.72;[^}]*--pupil-max:\s*0\.9;/s,
+    );
+  });
+});

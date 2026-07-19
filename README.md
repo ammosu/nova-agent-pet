@@ -10,7 +10,8 @@ Repository：<https://github.com/ammosu/nova-agent-pet>
 - 尾巴、左右耳、左右披風、完整前領片、完整正面袍身、寶石、雙手、雙眼、天線與嘴型皆使用獨立透明圖層。
 - 正面袍身與領片固定跟隨內層衣身，不會在招手、伸展、完成或星光舞時產生第二次位移。
 - 後方披風與寶石使用不同支點、週期與相位延遲；招手、伸展、星光舞與瞌睡另有拖曳、甩動與回彈時間軸。
-- 待機時自然切換角色方向與視線。
+- 待機時自然切換角色方向與視線；待機、聆聽、思考、執行與說話期間會以隨機間隔穿插眨眼、半閉眼、瞇眼與左右單眼表情。
+- 眼睛採 VTuber 式透明堆疊：眼型、虹膜深度、狀態感知縮瞳與星點高光分層運動，瞳孔也會在觀測艙內細微追隨游標。
 - 觀測艙具有游標視差、動態星塵、角色落地陰影與狀態切換脈衝。
 - 雙手採用非對稱表演節奏，依聆聽、思考、執行、說話、完成與錯誤狀態切換手勢。
 - 四種獨立角色動作：招手、伸展、星光舞與瞌睡；不會混入正式 Agent 狀態機。
@@ -46,7 +47,7 @@ npm run dev
 | --- | --- |
 | `npm run dev` | 啟動 Express、Vite 與語音 API 開發伺服器 |
 | `npm run build` | 執行 TypeScript 檢查並產生 `dist/` |
-| `npm test` | 執行 Vitest 狀態機測試 |
+| `npm test` | 執行 Vitest 狀態機、眼神排程與動畫回歸測試 |
 | `npm run preview` | 僅預覽 Vite build；不包含 Express 語音 API |
 
 提交變更前至少執行：
@@ -136,6 +137,8 @@ agent.on("message-ready", () => {
 │   └── validate_asset_layers.py
 ├── src/
 │   ├── App.tsx                # UI、模擬 Agent 流程、角色圖層
+│   ├── eyeMotion.ts           # 獨立於 Agent 狀態的眼神微表情排程
+│   ├── eyeMotion.test.ts      # 眼神狀態、機率與時間範圍測試
 │   ├── petMachine.ts          # Agent 狀態機
 │   ├── petMachine.test.ts     # 狀態轉移測試
 │   ├── styles.test.ts         # 固定衣物圖層的動畫回歸測試
@@ -161,9 +164,14 @@ agent.on("message-ready", () => {
 - `nova-pet-hand-left.png`、`nova-pet-hand-right.png`
 - `nova-pet-hand-open-left.png`、`nova-pet-hand-open-right.png`
 - `nova-pet-eye-left.png`、`nova-pet-eye-right.png`
+- `nova-pet-eye-depth-left.png`、`nova-pet-eye-depth-right.png`
+- `nova-pet-eye-pupil-left.png`、`nova-pet-eye-pupil-right.png`
+- `nova-pet-eye-glint-left.png`、`nova-pet-eye-glint-right.png`
+- `nova-pet-half-eyes.png`、`nova-pet-squint-eyes.png`
 - `nova-pet-antenna-alpha.png`
 - `nova-pet-idle-mouth.png`
 - `nova-pet-blink-eyes.png`
+- `nova-pet-blink-left.png`、`nova-pet-blink-right.png`
 - `nova-pet-speaking-mouth.png`
 - `nova-pet-happy-expression.png`
 
@@ -199,7 +207,7 @@ python3 scripts/validate_asset_layers.py
 已知污染區。重新產生素材後應先看到 `All runtime asset layers passed.`，再進入
 瀏覽器檢查動畫。
 
-重新產生後，請在瀏覽器依序檢查待機、思考、執行、說話、完成與錯誤狀態，確認沒有方格、重影或相鄰部件跟著移動。
+重新產生後，請在瀏覽器依序檢查待機、聆聽、思考、執行、說話、完成與錯誤狀態，並等待一般狀態出現眨眼、半閉眼、瞇眼與左右單眼表情。移動觀測艙內的游標，確認瞳孔與高光只在眼框內小幅跟隨；同時確認沒有方格、重影或相鄰部件跟著移動。完成、錯誤與瞌睡的既有表情優先於隨機眼神，`prefers-reduced-motion` 開啟時也不排程眼神微表情。
 
 ## Production build
 

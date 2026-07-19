@@ -2,7 +2,7 @@ from collections import deque
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -157,6 +157,118 @@ def extract_eye(source: Image.Image, bounds: tuple[float, float, float, float]) 
     return Image.fromarray(clear_transparent_rgb(output))
 
 
+def compress_eye_layer(eye: Image.Image, height_ratio: float) -> Image.Image:
+    rgba = eye.convert("RGBA")
+    alpha_bounds = rgba.getchannel("A").getbbox()
+    if alpha_bounds is None:
+        return Image.new("RGBA", rgba.size, (0, 0, 0, 0))
+
+    left, top, right, bottom = alpha_bounds
+    crop = rgba.crop(alpha_bounds)
+    target_height = max(1, round(crop.height * height_ratio))
+    compressed = crop.resize(
+        (crop.width, target_height),
+        Image.Resampling.LANCZOS,
+    )
+    output = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
+    output.alpha_composite(compressed, (left, bottom - target_height))
+    output_pixels = np.asarray(output).copy()
+    colors = output_pixels[..., :3].astype(np.int16)
+    red, green, blue = [colors[..., channel] for channel in range(3)]
+    face_cream = (
+        (red > 180)
+        & (green > 140)
+        & (blue > 90)
+        & (blue < 225)
+        & ((red - blue) > 20)
+        & ((red - blue) < 120)
+    )
+    output_pixels[face_cream, 3] = 0
+    return Image.fromarray(clear_transparent_rgb(output_pixels))
+
+
+def create_eye_detail_layers(eye: Image.Image) -> dict[str, Image.Image]:
+    rgba = np.asarray(eye.convert("RGBA"))
+    alpha = rgba[..., 3]
+    colors = rgba[..., :3].astype(np.float32)
+    red, green, blue = [colors[..., channel] for channel in range(3)]
+    inner = (
+        (alpha >= 32)
+        & (blue > red * 1.05)
+        & (blue > green * 1.05)
+        & (red < 170)
+    )
+    rows, columns = np.where(inner)
+    if not len(columns):
+        empty = Image.new("RGBA", eye.size, (0, 0, 0, 0))
+        return {"depth": empty, "pupil": empty, "glint": empty}
+
+    left, top = int(columns.min()), int(rows.min())
+    right, bottom = int(columns.max() + 1), int(rows.max() + 1)
+    width, height = right - left, bottom - top
+    center_x = float(columns.mean())
+    center_y = float(rows.mean()) + height * 0.04
+    y_axis, x_axis = np.indices(alpha.shape)
+
+    vertical = np.clip((y_axis - top) / max(height - 1, 1), 0, 1)
+    depth_pixels = np.zeros_like(rgba)
+    depth_pixels[..., 0] = np.round(72 + vertical * 20).astype(np.uint8)
+    depth_pixels[..., 1] = np.round(86 + (1 - vertical) * 44).astype(np.uint8)
+    depth_pixels[..., 2] = np.round(222 + (1 - vertical) * 22).astype(np.uint8)
+    depth_pixels[..., 3] = np.where(inner, np.minimum(alpha, 92), 0)
+
+    pupil_distance = (
+        ((x_axis - center_x) / max(width * 0.105, 1)) ** 2
+        + ((y_axis - center_y) / max(height * 0.29, 1)) ** 2
+    )
+    pupil_mask = Image.fromarray((pupil_distance <= 1).astype(np.uint8) * 255)
+    pupil_mask = pupil_mask.filter(ImageFilter.GaussianBlur(radius=0.7))
+    pupil_alpha = np.asarray(pupil_mask)
+    pupil_pixels = np.zeros_like(rgba)
+    pupil_pixels[..., :3] = (12, 9, 42)
+    pupil_pixels[..., 3] = np.where(
+        inner,
+        np.minimum(alpha, np.round(pupil_alpha * 0.82).astype(np.uint8)),
+        0,
+    )
+
+    glint_center = (
+        round(center_x + width * 0.18),
+        round(center_y + height * 0.16),
+    )
+    glint_core = Image.new("L", eye.size, 0)
+    draw = ImageDraw.Draw(glint_core)
+    radius_x = max(2, round(width * 0.045))
+    radius_y = max(2, round(height * 0.075))
+    draw.ellipse(
+        (
+            glint_center[0] - radius_x,
+            glint_center[1] - radius_y,
+            glint_center[0] + radius_x,
+            glint_center[1] + radius_y,
+        ),
+        fill=255,
+    )
+    glint_glow = glint_core.filter(ImageFilter.GaussianBlur(radius=2.2))
+    glint_alpha = np.maximum(
+        np.asarray(glint_glow),
+        np.asarray(glint_core),
+    )
+    glint_pixels = np.zeros_like(rgba)
+    glint_pixels[..., :3] = (226, 244, 255)
+    glint_pixels[..., 3] = np.where(
+        inner,
+        np.minimum(alpha, glint_alpha),
+        0,
+    )
+
+    return {
+        "depth": Image.fromarray(clear_transparent_rgb(depth_pixels)),
+        "pupil": Image.fromarray(clear_transparent_rgb(pupil_pixels)),
+        "glint": Image.fromarray(clear_transparent_rgb(glint_pixels)),
+    }
+
+
 def extract_eyelid(source: Image.Image, bounds: tuple[float, float, float, float]) -> Image.Image:
     rgba = np.asarray(source.convert("RGBA"))
     height, width = rgba.shape[:2]
@@ -208,10 +320,28 @@ def extract_dark_region(source: Image.Image, bounds: tuple[float, float, float, 
 
 def main() -> None:
     source = Image.open(SOURCE)
+    eye_layers: dict[str, Image.Image] = {}
     for name, bounds in EYES.items():
         output = ROOT / f"public/assets/nova-pet-eye-{name}.png"
-        extract_eye(source, bounds).save(output)
+        eye_layers[name] = extract_eye(source, bounds)
+        eye_layers[name].save(output)
         print(f"Wrote {output.relative_to(ROOT)}")
+
+        for detail, detail_layer in create_eye_detail_layers(eye_layers[name]).items():
+            detail_output = ROOT / f"public/assets/nova-pet-eye-{detail}-{name}.png"
+            detail_layer.save(detail_output)
+            print(f"Wrote {detail_output.relative_to(ROOT)}")
+
+    for expression, height_ratio in (("half", 0.68), ("squint", 0.38)):
+        expression_layer = Image.new("RGBA", source.size, (0, 0, 0, 0))
+        for eye_layer in eye_layers.values():
+            expression_layer = Image.alpha_composite(
+                expression_layer,
+                compress_eye_layer(eye_layer, height_ratio),
+            )
+        expression_output = ROOT / f"public/assets/nova-pet-{expression}-eyes.png"
+        expression_layer.save(expression_output)
+        print(f"Wrote {expression_output.relative_to(ROOT)}")
 
     idle_mouth_output = ROOT / "public/assets/nova-pet-idle-mouth.png"
     extract_dark_region(source, IDLE_MOUTH).save(idle_mouth_output)
@@ -219,8 +349,12 @@ def main() -> None:
 
     blink_source = Image.open(BLINK_SOURCE)
     blink_layer = Image.new("RGBA", blink_source.size, (0, 0, 0, 0))
-    for bounds in EYES.values():
-        blink_layer = Image.alpha_composite(blink_layer, extract_eyelid(blink_source, bounds))
+    for name, bounds in EYES.items():
+        single_blink_layer = extract_eyelid(blink_source, bounds)
+        single_blink_output = ROOT / f"public/assets/nova-pet-blink-{name}.png"
+        single_blink_layer.save(single_blink_output)
+        print(f"Wrote {single_blink_output.relative_to(ROOT)}")
+        blink_layer = Image.alpha_composite(blink_layer, single_blink_layer)
     blink_output = ROOT / "public/assets/nova-pet-blink-eyes.png"
     blink_layer.save(blink_output)
     print(f"Wrote {blink_output.relative_to(ROOT)}")

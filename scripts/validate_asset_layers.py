@@ -25,14 +25,23 @@ class LayerSpec:
 LAYER_SPECS = {
     "nova-pet-antenna-alpha.png": LayerSpec(),
     "nova-pet-antenna.png": LayerSpec(),
+    "nova-pet-blink-left.png": LayerSpec(),
+    "nova-pet-blink-right.png": LayerSpec(),
     "nova-pet-blink-eyes.png": LayerSpec(components=2),
     "nova-pet-cloak-back-left.png": LayerSpec(),
     "nova-pet-cloak-back-right.png": LayerSpec(),
     "nova-pet-collar-front.png": LayerSpec(components=2),
     "nova-pet-ear-left.png": LayerSpec(max_alpha_pixels=8000),
     "nova-pet-ear-right.png": LayerSpec(max_alpha_pixels=3500),
+    "nova-pet-eye-depth-left.png": LayerSpec(max_cream_pixels=0),
+    "nova-pet-eye-depth-right.png": LayerSpec(max_cream_pixels=0),
+    "nova-pet-eye-glint-left.png": LayerSpec(max_cream_pixels=0),
+    "nova-pet-eye-glint-right.png": LayerSpec(max_cream_pixels=0),
     "nova-pet-eye-left.png": LayerSpec(max_cream_pixels=0),
+    "nova-pet-eye-pupil-left.png": LayerSpec(max_cream_pixels=0),
+    "nova-pet-eye-pupil-right.png": LayerSpec(max_cream_pixels=0),
     "nova-pet-eye-right.png": LayerSpec(max_cream_pixels=0),
+    "nova-pet-half-eyes.png": LayerSpec(components=2, max_cream_pixels=0),
     "nova-pet-hand-left.png": LayerSpec(max_purple_pixels=700),
     "nova-pet-hand-open-left.png": LayerSpec(
         min_top=0.595,
@@ -48,6 +57,7 @@ LAYER_SPECS = {
     "nova-pet-pendant.png": LayerSpec(),
     "nova-pet-robe-front.png": LayerSpec(),
     "nova-pet-speaking-mouth.png": LayerSpec(),
+    "nova-pet-squint-eyes.png": LayerSpec(components=2, max_cream_pixels=0),
     "nova-pet-tail.png": LayerSpec(max_right=0.405),
 }
 

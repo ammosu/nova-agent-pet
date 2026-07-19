@@ -5,6 +5,11 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  expressiveEyeStates,
+  pickEyeMoment,
+  type EyeExpression,
+} from "./eyeMotion";
 import { petStatus, PetState, transitionPet } from "./petMachine";
 import { speak, stopSpeaking, VoiceProvider } from "./voice";
 
@@ -122,12 +127,15 @@ function App() {
   const [facing, setFacing] = useState<Facing>("right");
   const [lastFailedInput, setLastFailedInput] = useState("");
   const [activeAction, setActiveAction] = useState<ActiveAction | null>(null);
+  const [eyeExpression, setEyeExpression] = useState<EyeExpression>("open");
   const transcriptRef = useRef<HTMLDivElement>(null);
   const previewTimerRef = useRef<number | null>(null);
   const actionTimerRef = useRef<number | null>(null);
   const actionRunRef = useRef(0);
   const activeTaskRef = useRef<AbortController | null>(null);
   const demoFailuresRef = useRef(new Set<string>());
+  const eyeMotionEnabled =
+    !activeAction && expressiveEyeStates.includes(petState);
 
   useEffect(() => {
     fetch("/api/voice-status")
@@ -171,6 +179,48 @@ function App() {
 
     return () => window.clearTimeout(directionTimer);
   }, [activeAction, petState, facing]);
+
+  useEffect(() => {
+    setEyeExpression("open");
+
+    if (!eyeMotionEnabled) return;
+
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let expressionTimer: number | null = null;
+    let resetTimer: number | null = null;
+
+    const clearTimers = () => {
+      if (expressionTimer !== null) window.clearTimeout(expressionTimer);
+      if (resetTimer !== null) window.clearTimeout(resetTimer);
+      expressionTimer = null;
+      resetTimer = null;
+    };
+
+    const scheduleExpression = () => {
+      const moment = pickEyeMoment();
+      expressionTimer = window.setTimeout(() => {
+        setEyeExpression(moment.expression);
+        resetTimer = window.setTimeout(() => {
+          setEyeExpression("open");
+          scheduleExpression();
+        }, moment.duration);
+      }, moment.delay);
+    };
+
+    const handleMotionPreference = () => {
+      clearTimers();
+      setEyeExpression("open");
+      if (!motionPreference.matches) scheduleExpression();
+    };
+
+    if (!motionPreference.matches) scheduleExpression();
+    motionPreference.addEventListener("change", handleMotionPreference);
+
+    return () => {
+      motionPreference.removeEventListener("change", handleMotionPreference);
+      clearTimers();
+    };
+  }, [eyeMotionEnabled]);
 
   useEffect(
     () => () => {
@@ -351,6 +401,8 @@ function App() {
     event.currentTarget.style.setProperty("--orbit-y", `${vertical * -11}px`);
     event.currentTarget.style.setProperty("--drift-x", `${horizontal * 22}px`);
     event.currentTarget.style.setProperty("--drift-y", `${vertical * 16}px`);
+    event.currentTarget.style.setProperty("--eye-focus-x", `${horizontal * 4.2}px`);
+    event.currentTarget.style.setProperty("--eye-focus-y", `${vertical * 2.8}px`);
   };
 
   const resetHabitat = (event: ReactPointerEvent<HTMLElement>) => {
@@ -360,6 +412,8 @@ function App() {
     event.currentTarget.style.setProperty("--orbit-y", "0px");
     event.currentTarget.style.setProperty("--drift-x", "0px");
     event.currentTarget.style.setProperty("--drift-y", "0px");
+    event.currentTarget.style.setProperty("--eye-focus-x", "0px");
+    event.currentTarget.style.setProperty("--eye-focus-y", "0px");
   };
 
   const displayedStatus = activeAction
@@ -618,20 +672,75 @@ function App() {
                   alt=""
                   aria-hidden="true"
                 />
-                <span className="rig-eyes-direction" aria-hidden="true">
-                  <img
-                    className="pet-sprite rig-eye rig-eye-left"
-                    src="/assets/nova-pet-eye-left.png"
-                    alt=""
-                  />
-                  <img
-                    className="pet-sprite rig-eye rig-eye-right"
-                    src="/assets/nova-pet-eye-right.png"
-                    alt=""
-                  />
+                <span
+                  className={`rig-eyes-direction eye-${eyeExpression}`}
+                  aria-hidden="true"
+                >
+                  <span className="rig-open-eyes">
+                    <img
+                      className="pet-sprite rig-eye rig-eye-left"
+                      src="/assets/nova-pet-eye-left.png"
+                      alt=""
+                    />
+                    <img
+                      className="pet-sprite rig-eye rig-eye-right"
+                      src="/assets/nova-pet-eye-right.png"
+                      alt=""
+                    />
+                    <img
+                      className="pet-sprite rig-eye-detail rig-eye-detail-left rig-eye-depth"
+                      src="/assets/nova-pet-eye-depth-left.png"
+                      alt=""
+                    />
+                    <img
+                      className="pet-sprite rig-eye-detail rig-eye-detail-right rig-eye-depth"
+                      src="/assets/nova-pet-eye-depth-right.png"
+                      alt=""
+                    />
+                    <img
+                      className="pet-sprite rig-eye-detail rig-eye-detail-left rig-eye-pupil"
+                      src="/assets/nova-pet-eye-pupil-left.png"
+                      alt=""
+                    />
+                    <img
+                      className="pet-sprite rig-eye-detail rig-eye-detail-right rig-eye-pupil"
+                      src="/assets/nova-pet-eye-pupil-right.png"
+                      alt=""
+                    />
+                    <img
+                      className="pet-sprite rig-eye-detail rig-eye-detail-left rig-eye-glint"
+                      src="/assets/nova-pet-eye-glint-left.png"
+                      alt=""
+                    />
+                    <img
+                      className="pet-sprite rig-eye-detail rig-eye-detail-right rig-eye-glint"
+                      src="/assets/nova-pet-eye-glint-right.png"
+                      alt=""
+                    />
+                  </span>
                   <img
                     className="pet-sprite pet-face pet-blink"
                     src="/assets/nova-pet-blink-eyes.png"
+                    alt=""
+                  />
+                  <img
+                    className="pet-sprite pet-face pet-eye-expression pet-eye-half"
+                    src="/assets/nova-pet-half-eyes.png"
+                    alt=""
+                  />
+                  <img
+                    className="pet-sprite pet-face pet-eye-expression pet-eye-squint"
+                    src="/assets/nova-pet-squint-eyes.png"
+                    alt=""
+                  />
+                  <img
+                    className="pet-sprite pet-face pet-eye-expression pet-wink-left"
+                    src="/assets/nova-pet-blink-left.png"
+                    alt=""
+                  />
+                  <img
+                    className="pet-sprite pet-face pet-eye-expression pet-wink-right"
+                    src="/assets/nova-pet-blink-right.png"
                     alt=""
                   />
                 </span>
